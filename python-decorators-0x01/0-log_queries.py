@@ -1,52 +1,47 @@
 #!/usr/bin/env python3
 import sqlite3
+import functools
+from datetime import datetime   # required for timestamp logging
 
-
-class DatabaseConnection:
-    """Custom class-based context manager for database connections"""
-
-    def _init_(self, db_name):
-        self.db_name = db_name
-        self.conn = None
-
-    def _enter_(self):
-        # open connection when entering context
-        self.conn = sqlite3.connect(self.db_name)
-        return self.conn
-
-    def _exit_(self, exc_type, exc_value, traceback):
-        if exc_type:
-            print(f"An error occurred: {exc_value}")
-        if self.conn:
-            self.conn.close()
-        return False
+# setup database automatically
 
 
 def setup_db():
-    """Ensure the users table exists with some sample data"""
-    with DatabaseConnection("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                name TEXT,
-                email TEXT
-            )
-        """)
-        cursor.execute(
-            "INSERT OR IGNORE INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com')")
-        cursor.execute(
-            "INSERT OR IGNORE INTO users (id, name, email) VALUES (2, 'Bob', 'bob@example.com')")
-        conn.commit()
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)")
+    cursor.execute(
+        "INSERT OR IGNORE INTO users (id, name) VALUES (1, 'Alice')")
+    cursor.execute("INSERT OR IGNORE INTO users (id, name) VALUES (2, 'Bob')")
+    conn.commit()
+    conn.close()
 
 
+setup_db()  # run this before anything else
+
+
+# decorator to log SQL queries
+def log_queries(func):
+    @functools.wraps(func)
+    def wrapper(query, *args, **kwargs):
+        # log query with timestamp
+        print(f"[{datetime.now()}] Executing query: {query}")
+        return func(query, *args, **kwargs)
+    return wrapper
+
+
+@log_queries
+def fetch_all_users(query):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute(query)
+    results = cursor.fetchall()
+    conn.close()
+    return results
+
+
+# fetch users while logging the query
 if __name__ == "_main_":
-    setup_db()
-
-    with DatabaseConnection("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users")
-        results = cursor.fetchall()
-        print(results)
-    print("Database connection closed.")
-    print("Exited context manager.")
+    users = fetch_all_users("SELECT * FROM users")
+    print(users)
